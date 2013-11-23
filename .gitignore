@@ -1,5 +1,8 @@
-CMakeCache.txt
-CMakeFiles
-Makefile
-cmake_install.cmake
-install_manifest.txt
+## PDF Files ##
+*.pdf
+
+## Build Folder ##
+vi/*
+
+## Qt User File ##
+*.user
