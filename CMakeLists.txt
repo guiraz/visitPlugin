@@ -9,6 +9,10 @@ INCLUDE("/usr/local/bin/visit2.7.0/2.7.0/linux-x86_64/include/PluginVsInstall.cm
 INCLUDE("/usr/local/bin/visit2.7.0/2.7.0/linux-x86_64/include/VisItLibraryDependencies.cmake")
 
 PROJECT(MeshReader)
+FIND_PACKAGE(Qt4 REQUIRED)
+
+INCLUDE(${QT_USE_FILE})
+ADD_DEFINITIONS(${QT_DEFINITIONS})
 
 SET(COMMON_SOURCES
 MeshReaderPluginInfo.C
