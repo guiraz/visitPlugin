@@ -49,6 +49,7 @@
 #include <vtkStructuredGrid.h>
 #include <vtkUnstructuredGrid.h>
 #include <vtkCellType.h>
+#include <vtkIdList.h>
 
 #include <avtDatabaseMetaData.h>
 
@@ -58,10 +59,6 @@
 #include <InvalidVariableException.h>
 
 #include<DebugStream.h>
-
-#include<QFile>
-#include<QString>
-#include<QStringList>
 
 
 using     std::string;
@@ -124,13 +121,14 @@ avtMeshReaderFileFormat::PopulateDatabaseMetaData(avtDatabaseMetaData *md)
     avtMeshMetaData * mesh = new avtMeshMetaData;
     mesh->name = "mesh";
     mesh->meshType = AVT_UNSTRUCTURED_MESH;
+    mesh->numBlocks = 1;
     mesh->blockOrigin = 0;
-    mesh->spatialDimension = 2;
-    mesh->topologicalDimension = 0;
+    mesh->spatialDimension = 3;
+    mesh->topologicalDimension = 2;
     mesh->hasSpatialExtents=  false;
     md->Add(mesh);
 
-    AddScalarVarToMetaData(md,"_var", "mesh", AVT_NODECENT);
+    AddScalarVarToMetaData(md,"var", "mesh", AVT_NODECENT);
 }
 
 
@@ -243,61 +241,60 @@ avtMeshReaderFileFormat::GetVectorVar(const char *varname)
 
 void avtMeshReaderFileFormat::ReadData()
 {
-    QFile file(*new QString(_filename));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-         return;
 
     _grid = vtkUnstructuredGrid::New();
     _var = vtkFloatArray::New();
 
-    //On lit jusqu'à atteindre les vertices
-    QString * line = new QString(file.readLine());
-    line = new QString(line->split(" ", QString::SkipEmptyParts)[0]);
-    while(line->compare("Vertices") != 0)
-        line = new QString(file.readLine());
+    FILE * pFile;
+    char buffer [100];
 
-    //On récupère le nombre de vertices
-    line = new QString(file.readLine());
-    line = new QString(line->split(" ", QString::SkipEmptyParts)[0]);
-    int nbVertices = line->toInt();
-
-    //On créé un tableau de vertices
-    vtkPoints * points = vtkPoints::New();
-
-    //On lit et remplis les vertices jusqu'aux triangles
-    line = new QString(file.readLine());
-    line = new QString(line->split(" ", QString::SkipEmptyParts)[0]);
-    while(line->compare("Triangles") != 0)
+    pFile = fopen (_filename , "r");
+    if (pFile == NULL) perror ("Error opening file");
+    else
     {
-        QStringList coord = line->split(" ", QString::SkipEmptyParts);
-        points->InsertNextPoint(coord.at(0).toDouble(), coord.at(1).toDouble(), coord.at(2).toDouble());
-        line = new QString(file.readLine());
+        fscanf(pFile, "%s", buffer);
+        while ( strcmp(buffer, "Vertices")!= 0 )
+        {
+            fscanf(pFile, "%s", buffer);
+        }
+
+        int nbVertices;
+        fscanf(pFile,"%d", &nbVertices);
+
+        float x,y,z,v;
+        vtkPoints * points = vtkPoints::New();
+
+        for(int i=0; i<nbVertices; i++)
+        {
+            fscanf(pFile,"%f %f %f %f", &x, &y, &z, &v);
+            points->InsertNextPoint(x,y,z);
+        }
+
+        _grid->SetPoints(points);
+        points->Delete();
+
+        char null[100];
+        fscanf(pFile,"%s", null);
+
+        int nbTriangles;
+        fscanf(pFile,"%d", &nbTriangles);
+
+        int id[3];
+        float v2;
+
+        for(int i=0; i<nbTriangles; i++)
+        {
+            fscanf(pFile,"%d %d %d %f", &id[0], &id[1], &id[2], &v2);
+            vtkIdList *ids = vtkIdList::New();
+            ids->SetNumberOfIds(3);
+            ids->SetId(0, id[0]-1);
+            ids->SetId(1, id[1]-1);
+            ids->SetId(2, id[2]-1);
+            _grid->InsertNextCell(VTK_TRIANGLE, ids);
+            _var->InsertNextTuple1(v2);
+        }
+
+        fclose (pFile);
     }
-
-    //On met les vertices dans la unstructured grid
-    _grid->SetPoints(points);
-    points->Delete();
-
-    //On récupère le nombre de triangles
-    line = new QString(file.readLine());
-    line = new QString(line->split(" ", QString::SkipEmptyParts)[0]);
-    int nbFaces = line->toInt();
-
-    //On lit et remplis les triangles directement dans la grid jusqu'à EOF
-    line = new QString(file.readLine());
-    line = new QString(line->split(" ", QString::SkipEmptyParts)[0]);
-    while(line->compare("END") != 0)
-    {
-        QStringList coord = line->split(" ", QString::SkipEmptyParts);
-        vtkIdType* pointsIds = new vtkIdType[3];
-        pointsIds[0] = coord.at(0).toInt();
-        pointsIds[1] = coord.at(1).toInt();
-        pointsIds[2] = coord.at(2).toInt();
-
-        _grid->InsertNextCell(VTK_TRIANGLE, 3, pointsIds);
-
-        line = new QString(file.readLine());
-    }
-
-    file.close();
+    return;
 }
